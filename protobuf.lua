@@ -36,6 +36,7 @@ project "protobuf"
     prjDir .. "/src/google/protobuf/generated_message_util.cc",
     prjDir .. "/src/google/protobuf/implicit_weak_message.cc",
     prjDir .. "/src/google/protobuf/io/coded_stream.cc",
+    prjDir .. "/src/google/protobuf/io/io_win32.cc",
     prjDir .. "/src/google/protobuf/io/printer.cc",
     prjDir .. "/src/google/protobuf/io/strtod.cc",
     prjDir .. "/src/google/protobuf/io/tokenizer.cc",
