@@ -99,7 +99,7 @@ project "protobuf"
   -- configurations
   -- -------------------------------------------------------------
 
-  if (os.is("windows") and not _TARGET_IS_WINUWP) then
+  if (_PLATFORM_WINDOWS) then
     -- -------------------------------------------------------------
     -- configuration { "windows" }
     -- -------------------------------------------------------------
@@ -163,13 +163,13 @@ project "protobuf"
     -- -------------------------------------------------------------
   end
 
-  if (os.is("linux") and not _OS_IS_ANDROID) then
+  if (_PLATFORM_LINUX) then
     -- -------------------------------------------------------------
     -- configuration { "linux" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
-  
+
     dofile (_BUILD_DIR .. "/static_linux.lua")
 
     -- project specific configuration settings
@@ -231,7 +231,7 @@ project "protobuf"
     -- -------------------------------------------------------------
   end
 
-  if (os.is("macosx") and not _OS_IS_IOS and not _OS_IS_ANDROID) then
+  if (_PLATFORM_MACOS) then
     -- -------------------------------------------------------------
     -- configuration { "macosx" }
     -- -------------------------------------------------------------
@@ -275,9 +275,9 @@ project "protobuf"
     -- -------------------------------------------------------------
   end
 
-  if (_OS_IS_IOS) then
+  if (_PLATFORM_IOS) then
     -- -------------------------------------------------------------
-    -- configuration { "ios" } == _OS_IS_IOS
+    -- configuration { "ios*" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
@@ -343,9 +343,9 @@ project "protobuf"
     -- -------------------------------------------------------------
   end
 
-  if (_OS_IS_ANDROID) then
+  if (_PLATFORM_ANDROID) then
     -- -------------------------------------------------------------
-    -- configuration { "android" } == _OS_IS_ANDROID
+    -- configuration { "android*" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
@@ -459,9 +459,9 @@ project "protobuf"
     -- -------------------------------------------------------------
   end
 
-  if (_TARGET_IS_WINUWP) then
+  if (_PLATFORM_WINUWP) then
     -- -------------------------------------------------------------
-    -- configuration { "winuwp" } == _TARGET_IS_WINUWP
+    -- configuration { "windows" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
