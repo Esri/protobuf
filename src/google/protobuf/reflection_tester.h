@@ -31,10 +31,10 @@
 #ifndef GOOGLE_PROTOBUF_REFLECTION_TESTER_H__
 #define GOOGLE_PROTOBUF_REFLECTION_TESTER_H__
 
-#include <google/protobuf/message.h>
+#include "google/protobuf/message.h"
 
 // Must be included last.
-#include <google/protobuf/port_def.inc>
+#include "google/protobuf/port_def.inc"
 
 namespace google {
 namespace protobuf {
@@ -67,6 +67,13 @@ class MapReflectionTester {
   MapIterator MapBegin(Message* message, const std::string& field_name);
   MapIterator MapEnd(Message* message, const std::string& field_name);
   int MapSize(const Message& message, const std::string& field_name);
+
+  static std::string long_string() {
+    return "This is a very long string that goes in the heap";
+  }
+  static std::string long_string_2() {
+    return "This is another very long string that goes in the heap";
+  }
 
  private:
   const FieldDescriptor* F(const std::string& name);
@@ -117,6 +124,6 @@ class MapReflectionTester {
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_REFLECTION_TESTER_H__

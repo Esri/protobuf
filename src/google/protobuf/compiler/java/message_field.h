@@ -35,10 +35,10 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_FIELD_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_MESSAGE_FIELD_H__
 
-#include <map>
 #include <string>
 
 #include "google/protobuf/compiler/java/field.h"
+#include "google/protobuf/io/printer.h"
 
 namespace google {
 namespace protobuf {
@@ -96,18 +96,19 @@ class ImmutableMessageFieldGenerator : public ImmutableFieldGenerator {
   const FieldDescriptor* descriptor_;
   int message_bit_index_;
   int builder_bit_index_;
-  std::map<std::string, std::string> variables_;
+  absl::flat_hash_map<absl::string_view, std::string> variables_;
   ClassNameResolver* name_resolver_;
   Context* context_;
 
   virtual void PrintNestedBuilderCondition(
       io::Printer* printer, const char* regular_case,
       const char* nested_builder_case) const;
-  virtual void PrintNestedBuilderFunction(io::Printer* printer,
-                                          const char* method_prototype,
-                                          const char* regular_case,
-                                          const char* nested_builder_case,
-                                          const char* trailing_code) const;
+  virtual void PrintNestedBuilderFunction(
+      io::Printer* printer, const char* method_prototype,
+      const char* regular_case, const char* nested_builder_case,
+      const char* trailing_code,
+      absl::optional<io::AnnotationCollector::Semantic> semantic =
+          absl::nullopt) const;
 
  private:
   void GenerateKotlinOrNull(io::Printer* printer) const;
@@ -172,11 +173,12 @@ class RepeatedImmutableMessageFieldGenerator
   void PrintNestedBuilderCondition(
       io::Printer* printer, const char* regular_case,
       const char* nested_builder_case) const override;
-  void PrintNestedBuilderFunction(io::Printer* printer,
-                                  const char* method_prototype,
-                                  const char* regular_case,
-                                  const char* nested_builder_case,
-                                  const char* trailing_code) const override;
+  void PrintNestedBuilderFunction(
+      io::Printer* printer, const char* method_prototype,
+      const char* regular_case, const char* nested_builder_case,
+      const char* trailing_code,
+      absl::optional<io::AnnotationCollector::Semantic> semantic =
+          absl::nullopt) const override;
 };
 
 }  // namespace java
