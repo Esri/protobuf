@@ -13,6 +13,10 @@ includedirs {
   _3RDPARTY_DIR .. "/zlib-ng",
 }
 
+defines {
+  "STRIP_LOG=1", -- Disable logging in abseil
+}
+
 files {
   "src/google/protobuf/any_lite.cc",
   "src/google/protobuf/arena.cc",
