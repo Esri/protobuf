@@ -45,7 +45,6 @@
 #include "google/protobuf/stubs/common.h"
 #include "google/protobuf/testing/file.h"
 #include "google/protobuf/testing/file.h"
-#include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
 #include "absl/log/absl_check.h"
 #include "absl/log/absl_log.h"
@@ -1181,7 +1180,7 @@ TEST(CordOutputStreamTest, ProperHintCreatesSingleFlatCord) {
   EXPECT_EQ(flat, std::string(2000, 'a'));
 }
 
-TEST(CordOutputStreamTest, SizeHintDicatesTotalSize) {
+TEST(CordOutputStreamTest, SizeHintDictatesTotalSize) {
   absl::Cord cord(std::string(500, 'a'));
   CordOutputStream output(std::move(cord), 2000);
   void* data;
@@ -1404,7 +1403,7 @@ TEST_F(IoTest, CordOutputBufferEndsAtSizeHint) {
 // To test files, we create a temporary file, write, read, truncate, repeat.
 TEST_F(IoTest, FileIo) {
   std::string filename =
-      absl::StrCat(TestTempDir(), "/zero_copy_stream_test_file");
+      absl::StrCat(::testing::TempDir(), "/zero_copy_stream_test_file");
 
   for (int i = 0; i < kBlockSizeCount; i++) {
     for (int j = 0; j < kBlockSizeCount; j++) {
@@ -1502,7 +1501,7 @@ TEST_F(IoTest, BlockingFileIoWithTimeout) {
 #if HAVE_ZLIB
 TEST_F(IoTest, GzipFileIo) {
   std::string filename =
-      absl::StrCat(TestTempDir(), "/zero_copy_stream_test_file");
+      absl::StrCat(::testing::TempDir(), "/zero_copy_stream_test_file");
 
   for (int i = 0; i < kBlockSizeCount; i++) {
     for (int j = 0; j < kBlockSizeCount; j++) {
@@ -1739,14 +1738,14 @@ TEST_F(IoTest, LimitingInputStreamByteCount) {
 
 // Check that a zero-size array doesn't confuse the code.
 TEST(ZeroSizeArray, Input) {
-  ArrayInputStream input(NULL, 0);
+  ArrayInputStream input(nullptr, 0);
   const void* data;
   int size;
   EXPECT_FALSE(input.Next(&data, &size));
 }
 
 TEST(ZeroSizeArray, Output) {
-  ArrayOutputStream output(NULL, 0);
+  ArrayOutputStream output(nullptr, 0);
   void* data;
   int size;
   EXPECT_FALSE(output.Next(&data, &size));
@@ -1756,3 +1755,5 @@ TEST(ZeroSizeArray, Output) {
 }  // namespace io
 }  // namespace protobuf
 }  // namespace google
+
+#include "google/protobuf/port_undef.inc"

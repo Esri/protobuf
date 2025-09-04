@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "google/protobuf/any.pb.h"
 #include "google/protobuf/source_context.pb.h"
 #include "google/protobuf/type.pb.h"
 #include "google/protobuf/wrappers.pb.h"
@@ -197,11 +198,11 @@ std::string DefaultValueAsString(const FieldDescriptor& descriptor) {
       if (descriptor.type() == FieldDescriptor::TYPE_BYTES) {
         return absl::CEscape(descriptor.default_value_string());
       } else {
-        return descriptor.default_value_string();
+        return std::string(descriptor.default_value_string());
       }
       break;
     case FieldDescriptor::CPPTYPE_ENUM:
-      return descriptor.default_value_enum()->name();
+      return std::string(descriptor.default_value_enum()->name());
       break;
     case FieldDescriptor::CPPTYPE_MESSAGE:
       ABSL_DLOG(FATAL) << "Messages can't have default values!";
@@ -251,17 +252,21 @@ void ConvertFieldDescriptor(absl::string_view url_prefix,
   ConvertFieldOptions(descriptor.options(), *field->mutable_options());
 }
 
-Syntax ConvertSyntax(FileDescriptorLegacy::Syntax syntax) {
-  switch (syntax) {
-    default:
+Syntax ConvertSyntax(Edition edition) {
+  switch (edition) {
+    case Edition::EDITION_PROTO2:
       return Syntax::SYNTAX_PROTO2;
+    case Edition::EDITION_PROTO3:
+      return Syntax::SYNTAX_PROTO3;
+    default:
+      return Syntax::SYNTAX_EDITIONS;
   }
 }
 
 void ConvertEnumDescriptor(const EnumDescriptor& descriptor, Enum* enum_type) {
   enum_type->Clear();
   enum_type->set_syntax(
-      ConvertSyntax(FileDescriptorLegacy(descriptor.file()).syntax()));
+      ConvertSyntax(FileDescriptorLegacy(descriptor.file()).edition()));
 
   enum_type->set_name(descriptor.full_name());
   enum_type->mutable_source_context()->set_file_name(descriptor.file()->name());
@@ -283,7 +288,7 @@ void ConvertDescriptor(absl::string_view url_prefix,
   type->Clear();
   type->set_name(descriptor.full_name());
   type->set_syntax(
-      ConvertSyntax(FileDescriptorLegacy(descriptor.file()).syntax()));
+      ConvertSyntax(FileDescriptorLegacy(descriptor.file()).edition()));
   for (int i = 0; i < descriptor.field_count(); ++i) {
     ConvertFieldDescriptor(url_prefix, *descriptor.field(i),
                            type->add_fields());
@@ -378,3 +383,5 @@ Enum ConvertDescriptorToType(const EnumDescriptor& descriptor) {
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google
+
+#include "google/protobuf/port_undef.inc"
