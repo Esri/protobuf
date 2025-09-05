@@ -17,6 +17,8 @@
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
+#include "google/protobuf/compiler/code_generator.h"
 #include "google/protobuf/compiler/python/helpers.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor.pb.h"
@@ -37,7 +39,7 @@ std::string PyiGenerator::ModuleLevelName(const DescriptorT& descriptor) const {
   std::string name = NamePrefixedWithNestedTypes(descriptor, ".");
   if (descriptor.file() != file_) {
     std::string module_alias;
-    std::string filename = descriptor.file()->name();
+    const absl::string_view filename = descriptor.file()->name();
     if (import_map_.find(filename) == import_map_.end()) {
       std::string module_name = ModuleName(descriptor.file()->name());
       std::vector<absl::string_view> tokens = absl::StrSplit(module_name, '.');
@@ -69,7 +71,7 @@ struct ImportModules {
 };
 
 // Checks whether a descriptor name matches a well-known type.
-bool IsWellKnownType(const std::string& name) {
+bool IsWellKnownType(const absl::string_view name) {
   // LINT.IfChange(wktbases)
   return (name == "google.protobuf.Any" ||
           name == "google.protobuf.Duration" ||
@@ -130,7 +132,7 @@ void CheckImportModules(const Descriptor* descriptor,
 void PyiGenerator::PrintImportForDescriptor(
     const FileDescriptor& desc, absl::flat_hash_set<std::string>* seen_aliases,
     bool* has_importlib) const {
-  const std::string& filename = desc.name();
+  const absl::string_view filename = desc.name();
   std::string module_name_owned = StrippedModuleName(filename);
   absl::string_view module_name(module_name_owned);
   size_t last_dot_pos = module_name.rfind('.');
@@ -168,6 +170,9 @@ void PyiGenerator::PrintImports() const {
   bool has_importlib = false;
   for (int i = 0; i < file_->dependency_count(); ++i) {
     const FileDescriptor* dep = file_->dependency(i);
+    if (strip_nonfunctional_codegen_ && IsKnownFeatureProto(dep->name())) {
+      continue;
+    }
     PrintImportForDescriptor(*dep, &seen_aliases, &has_importlib);
     for (int j = 0; j < dep->public_dependency_count(); ++j) {
       PrintImportForDescriptor(*dep->public_dependency(j), &seen_aliases,
@@ -283,7 +288,7 @@ printer_->Annotate(label.c_str(), descriptor);
 }
 
 void PyiGenerator::PrintEnum(const EnumDescriptor& enum_descriptor) const {
-  std::string enum_name = enum_descriptor.name();
+  const absl::string_view enum_name = enum_descriptor.name();
   printer_->Print(
       "class $enum_name$(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):\n"
       "    __slots__ = ()\n",
@@ -380,7 +385,7 @@ void PyiGenerator::PrintMessage(
   if (!is_nested) {
     printer_->Print("\n");
   }
-  std::string class_name = message_descriptor.name();
+  const absl::string_view class_name = message_descriptor.name();
   std::string extra_base;
   // A well-known type needs to inherit from its corresponding base class in
   // net/proto2/python/internal/well_known_types.
@@ -479,7 +484,7 @@ void PyiGenerator::PrintMessage(
       has_key_words = true;
       continue;
     }
-    std::string field_name = field_des->name();
+    std::string field_name = std::string(field_des->name());
     if (is_first && field_name == "self") {
       // See b/144146793 for an example of real code that generates a (self,
       // self) method signature. Since repeating a parameter name is illegal in
@@ -562,18 +567,21 @@ bool PyiGenerator::Generate(const FileDescriptor* file,
   import_map_.clear();
   // Calculate file name.
   file_ = file;
-  // In google3, devtools/python/blaze/pytype/pytype_impl.bzl uses --pyi_out to
+  // In google3, devtools/python/bazel/pytype/pytype_impl.bzl uses --pyi_out to
   // directly set the output file name.
   std::vector<std::pair<std::string, std::string> > options;
   ParseGeneratorParameter(parameter, &options);
 
   std::string filename;
   bool annotate_code = false;
+  strip_nonfunctional_codegen_ = false;
   for (const std::pair<std::string, std::string>& option : options) {
     if (option.first == "annotate_code") {
       annotate_code = true;
     } else if (absl::EndsWith(option.first, ".pyi")) {
       filename = option.first;
+    } else if (option.first == "experimental_strip_nonfunctional_codegen") {
+      strip_nonfunctional_codegen_ = true;
     } else {
       *error = absl::StrCat("Unknown generator option: ", option.first);
       return false;

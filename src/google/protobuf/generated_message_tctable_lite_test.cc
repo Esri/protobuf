@@ -6,13 +6,27 @@
 // https://developers.google.com/open-source/licenses/bsd
 
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "absl/log/absl_check.h"
+#include "absl/log/absl_log.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
+#include "google/protobuf/generated_message_tctable_decl.h"
 #include "google/protobuf/generated_message_tctable_impl.h"
+#include "google/protobuf/io/coded_stream.h"
+#include "google/protobuf/parse_context.h"
 #include "google/protobuf/unittest.pb.h"
 #include "google/protobuf/wire_format_lite.h"
+
+
+// clang-format off
+#include "google/protobuf/port_def.inc"
+// clang-format on
 
 namespace google {
 namespace protobuf {
@@ -20,6 +34,7 @@ namespace internal {
 
 namespace {
 
+using ::testing::ElementsAreArray;
 using ::testing::Eq;
 using ::testing::Not;
 using ::testing::Optional;
@@ -36,11 +51,10 @@ TcFieldData Xor2SerializedBytes(TcFieldData tfd, const char* ptr) {
 absl::optional<const char*> fallback_ptr_received;
 absl::optional<uint64_t> fallback_hasbits_received;
 absl::optional<uint64_t> fallback_tag_received;
-const char* FastParserGaveUp(::google::protobuf::MessageLite*, const char* ptr,
-                             ::google::protobuf::internal::ParseContext*,
-                             ::google::protobuf::internal::TcFieldData data,
-                             const ::google::protobuf::internal::TcParseTableBase*,
-                             uint64_t hasbits) {
+PROTOBUF_CC const char* FastParserGaveUp(
+    ::google::protobuf::MessageLite*, const char* ptr, ::google::protobuf::internal::ParseContext*,
+    ::google::protobuf::internal::TcFieldData data,
+    const ::google::protobuf::internal::TcParseTableBase*, uint64_t hasbits) {
   fallback_ptr_received = ptr;
   fallback_hasbits_received = hasbits;
   fallback_tag_received = data.tag();
@@ -81,7 +95,11 @@ TEST(FastVarints, NameHere) {
           0,                                             // num_aux_entries
           offsetof(decltype(parse_table), field_names),  // no aux_entries
           nullptr,                                       // default instance
+          nullptr,                                       // post_loop_handler
           FastParserGaveUp,                              // fallback
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,  // to_prefetch
+#endif              // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       // Fast Table:
       {{
@@ -272,7 +290,11 @@ TEST(IsEntryForFieldNumTest, Matcher) {
           0,           // num_field_entries
           0, 0,        // num_aux_entries, aux_offset,
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           nullptr,     // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       }};
   // clang-format on
   int table_field_numbers[] = {1, 2, 3};
@@ -340,7 +362,11 @@ TEST_F(FindFieldEntryTest, SequentialFieldRange) {
           5,           // num_field_entries
           0, 0,        // num_aux_entries, aux_offset,
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           {},          // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       {},  // fast_entries
       // field_lookup_table for 2, 3, 4, 5, 111:
@@ -380,7 +406,11 @@ TEST_F(FindFieldEntryTest, SmallScanRange) {
           6,           // num_field_entries
           0, 0,        // num_aux_entries, aux_offset,
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           {},          // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       {},  // fast_entries
       // field_lookup_table for 1, 3, 4, 5, 7, 111:
@@ -428,7 +458,11 @@ TEST_F(FindFieldEntryTest, BinarySearchRange) {
           10,          // num_field_entries
           0, 0,        // num_aux_entries, aux_offset,
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           {},          // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       {},  // fast_entries
       // field_lookup_table for 1, 3, 4, 5, 6, 8, 9, 11, 12, 70
@@ -473,7 +507,11 @@ TEST_F(FindFieldEntryTest, OutOfRange) {
           0,           // num_aux_entries
           offsetof(decltype(table), field_names),  // no aux_entries
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           {},          // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       {},  // fast_entries
       {{// field lookup table
@@ -523,7 +561,11 @@ TEST_F(FindFieldEntryTest, EmptyMessage) {
           0,           // num_aux_entries
           offsetof(TableType, field_names),
           nullptr,     // default instance
+          nullptr,     // post_loop_handler
           nullptr,     // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+          nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
       },
       {},  // fast_entries
       {{// empty field lookup table
@@ -573,7 +615,11 @@ const TcParseTable<5, 134, 5, 2176, 55> test_all_types_table = {
         5,           // num_aux_entries
         offsetof(decltype(test_all_types_table), aux_entries),
         nullptr,     // default instance
+        nullptr,     // post_loop_handler
         nullptr,     // fallback function
+#ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+        nullptr,     // to_prefetch
+#endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     },
     {{
         // tail-call table
@@ -831,7 +877,7 @@ TEST(GeneratedMessageTctableLiteTest, PackedEnumSmallRange) {
 // This test checks that the parser doesn't overflow an int32 when computing the
 // array's new length.
 TEST(GeneratedMessageTctableLiteTest, PackedEnumSmallRangeLargeSize) {
-#ifdef ABSL_HAVE_MEMORY_SANITIZER
+#ifdef PROTOBUF_MSAN
   // This test attempts to allocate 8GB of memory, which OOMs MSAN.
   return;
 #endif
@@ -899,6 +945,9 @@ TEST(GeneratedMessageTctableLiteTest,
   EXPECT_LE(proto.vals().Capacity(), 2048);
 }
 
+
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google
+
+#include "google/protobuf/port_undef.inc"

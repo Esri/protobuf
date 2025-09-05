@@ -16,6 +16,9 @@
 #include "google/protobuf/io/coded_stream.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
 
+// Must be included last.
+#include "google/protobuf/port_def.inc"
+
 namespace google {
 namespace protobuf {
 namespace internal {
@@ -27,6 +30,11 @@ struct ArenaTestPeer {
   static auto PeekCleanupListForTesting(Arena* arena) {
     return arena->PeekCleanupListForTesting();
   }
+  template <typename T, typename... U>
+  static constexpr auto GetConstructType() {
+    return Arena::GetConstructType<T, U...>();
+  }
+  using ConstructType = Arena::ConstructType;
 };
 
 struct CleanupGrowthInfo {
@@ -70,8 +78,7 @@ template <typename T>
 class ArenaHolder {
  public:
   explicit ArenaHolder(Arena* arena)
-      : field_(Arena::CreateMessage<T>(arena)),
-        owned_by_arena_(arena != nullptr) {
+      : field_(Arena::Create<T>(arena)), owned_by_arena_(arena != nullptr) {
     ABSL_DCHECK(google::protobuf::Arena::is_arena_constructable<T>::value);
     ABSL_DCHECK(google::protobuf::Arena::is_destructor_skippable<T>::value);
   }
@@ -94,5 +101,7 @@ class ArenaHolder {
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google
+
+#include "google/protobuf/port_undef.inc"
 
 #endif  // GOOGLE_PROTOBUF_ARENA_TEST_UTIL_H__

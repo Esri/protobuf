@@ -46,6 +46,7 @@
 #include "google/protobuf/map_proto2_unittest.pb.h"
 #include "google/protobuf/map_proto3_unittest.pb.h"
 #include "google/protobuf/message.h"
+#include "google/protobuf/port.h"
 #include "google/protobuf/reflection.h"
 #include "google/protobuf/reflection_ops.h"
 #include "google/protobuf/test_util2.h"
@@ -58,6 +59,7 @@
 #include "google/protobuf/port_def.inc"
 
 using ::testing::ElementsAre;
+using ::testing::IsEmpty;
 using ::testing::Pair;
 
 namespace google {
@@ -183,6 +185,11 @@ struct MapTestPeer {
   }
 
   template <typename T>
+  static size_t NumBuckets(T& map) {
+    return map.num_buckets_;
+  }
+
+  template <typename T>
   static size_t BucketNumber(T& map, typename T::key_type key) {
     return map.BucketNumber(key);
   }
@@ -198,6 +205,10 @@ struct MapTestPeer {
       if (TableEntryIsTree(map.table_[i])) return true;
     }
     return false;
+  }
+
+  static int CalculateHiCutoff(int num_buckets) {
+    return Map<int, int>::CalculateHiCutoff(num_buckets);
   }
 };
 
@@ -320,6 +331,13 @@ namespace internal {
 
 template <>
 struct RealKeyToVariantKey<MoveTestKey> {
+  VariantKey operator()(const MoveTestKey& value) const {
+    return VariantKey(value.data);
+  }
+};
+
+template <>
+struct RealKeyToVariantKeyAlternative<MoveTestKey> {
   VariantKey operator()(const MoveTestKey& value) const {
     return VariantKey(value.data);
   }
@@ -999,7 +1017,7 @@ TEST_F(MapImplTest, EraseSingleByKey) {
   EXPECT_EQ(0, map_.erase(key));
 }
 
-TEST_F(MapImplTest, EraseMutipleByKey) {
+TEST_F(MapImplTest, EraseMultipleByKey) {
   // erase in one specific order to trigger corner cases
   for (int i = 0; i < 5; i++) {
     map_[i] = i;
@@ -1243,7 +1261,7 @@ TEST_F(MapImplTest, SwapFieldArenaReflection) {
     {
       // Use local_arena to allocate lhs to trigger use-after-free error.
       Arena local_arena;
-      auto* lhs = Arena::CreateMessage<TestMap>(&local_arena);
+      auto* lhs = Arena::Create<TestMap>(&local_arena);
       const auto* reflection = lhs->GetReflection();
       std::vector<const FieldDescriptor*> fields;
 
@@ -1276,7 +1294,7 @@ TEST_F(MapImplTest, CopyAssignMapIterator) {
 }
 
 TEST_F(MapImplTest, SpaceUsed) {
-  constexpr size_t kMinCap = 8;
+  constexpr size_t kMinCap = 16 / sizeof(void*);
 
   Map<int32_t, int32_t> m;
   // An newly constructed map should have no space used.
@@ -1286,15 +1304,11 @@ TEST_F(MapImplTest, SpaceUsed) {
     std::pair<int32_t, int32_t> kv;
   };
 
-  size_t capacity = kMinCap;
   for (int i = 0; i < 100; ++i) {
     m[i];
-    static constexpr double kMaxLoadFactor = .75;
-    if (m.size() >= capacity * kMaxLoadFactor) {
-      capacity *= 2;
-    }
     EXPECT_EQ(m.SpaceUsedExcludingSelfLong(),
-              sizeof(void*) * capacity + m.size() * sizeof(IntIntNode));
+              sizeof(void*) * MapTestPeer::NumBuckets(m) +
+                  m.size() * sizeof(IntIntNode));
   }
 
   // Test string, and non-scalar keys.
@@ -1360,10 +1374,9 @@ void TestTransparent(const Key& key, const Key& miss_key) {
   const auto& cm = m;
 
   m.insert({"ABC", 1});
-
-  const auto abc_it = m.begin();
-
   m.insert({"DEF", 2});
+
+  const auto abc_it = m.find("ABC");
 
   using testing::Pair;
   using testing::UnorderedElementsAre;
@@ -1574,7 +1587,7 @@ TEST_F(MapFieldReflectionTest, RegularFields) {
           message_int32_message.GetReflection()->GetInt32(
               message_int32_message, fd_map_int32_foreign_message_key);
       const ForeignMessage& value_int32_message =
-          DownCast<const ForeignMessage&>(
+          DownCastMessage<ForeignMessage>(
               message_int32_message.GetReflection()->GetMessage(
                   message_int32_message, fd_map_int32_foreign_message_value));
       EXPECT_EQ(value_int32_message.c(), Func(key_int32_message, 6));
@@ -1611,7 +1624,7 @@ TEST_F(MapFieldReflectionTest, RegularFields) {
           message_int32_message.GetReflection()->GetInt32(
               message_int32_message, fd_map_int32_foreign_message_key);
       const ForeignMessage& value_int32_message =
-          DownCast<const ForeignMessage&>(
+          DownCastMessage<ForeignMessage>(
               message_int32_message.GetReflection()->GetMessage(
                   message_int32_message, fd_map_int32_foreign_message_value));
       EXPECT_EQ(value_int32_message.c(), Func(key_int32_message, 6));
@@ -1648,7 +1661,7 @@ TEST_F(MapFieldReflectionTest, RegularFields) {
       int32_t key_int32_message =
           message_int32_message->GetReflection()->GetInt32(
               *message_int32_message, fd_map_int32_foreign_message_key);
-      ForeignMessage* value_int32_message = DownCast<ForeignMessage*>(
+      ForeignMessage* value_int32_message = DownCastMessage<ForeignMessage>(
           message_int32_message->GetReflection()->MutableMessage(
               message_int32_message, fd_map_int32_foreign_message_value));
       value_int32_message->set_c(Func(key_int32_message, -6));
@@ -1804,7 +1817,7 @@ TEST_F(MapFieldReflectionTest, RepeatedFieldRefForRegularFields) {
           message_int32_message.GetReflection()->GetInt32(
               message_int32_message, fd_map_int32_foreign_message_key);
       const ForeignMessage& value_int32_message =
-          DownCast<const ForeignMessage&>(
+          DownCastMessage<ForeignMessage>(
               message_int32_message.GetReflection()->GetMessage(
                   message_int32_message, fd_map_int32_foreign_message_value));
       EXPECT_EQ(value_int32_message.c(), Func(key_int32_message, 6));
@@ -1845,7 +1858,7 @@ TEST_F(MapFieldReflectionTest, RepeatedFieldRefForRegularFields) {
           message_int32_message.GetReflection()->GetInt32(
               message_int32_message, fd_map_int32_foreign_message_key);
       const ForeignMessage& value_int32_message =
-          DownCast<const ForeignMessage&>(
+          DownCastMessage<ForeignMessage>(
               message_int32_message.GetReflection()->GetMessage(
                   message_int32_message, fd_map_int32_foreign_message_value));
       EXPECT_EQ(value_int32_message.c(), Func(key_int32_message, 6));
@@ -1963,7 +1976,7 @@ TEST_F(MapFieldReflectionTest, RepeatedFieldRefForRegularFields) {
       int32_t key = message.GetReflection()->GetInt32(
           message, fd_map_int32_foreign_message_key);
       const ForeignMessage& sub_message =
-          DownCast<const ForeignMessage&>(message.GetReflection()->GetMessage(
+          DownCastMessage<ForeignMessage>(message.GetReflection()->GetMessage(
               message, fd_map_int32_foreign_message_value));
       result[key].MergeFrom(sub_message);
       ++index;
@@ -2117,13 +2130,13 @@ TEST_F(MapFieldReflectionTest, RepeatedFieldRefForRegularFields) {
     const Message& message0a =
         mmf_int32_foreign_message.Get(0, entry_int32_foreign_message.get());
     const ForeignMessage& sub_message0a =
-        DownCast<const ForeignMessage&>(message0a.GetReflection()->GetMessage(
+        DownCastMessage<ForeignMessage>(message0a.GetReflection()->GetMessage(
             message0a, fd_map_int32_foreign_message_value));
     int32_t int32_value0a = sub_message0a.c();
     const Message& message9a =
         mmf_int32_foreign_message.Get(9, entry_int32_foreign_message.get());
     const ForeignMessage& sub_message9a =
-        DownCast<const ForeignMessage&>(message9a.GetReflection()->GetMessage(
+        DownCastMessage<ForeignMessage>(message9a.GetReflection()->GetMessage(
             message9a, fd_map_int32_foreign_message_value));
     int32_t int32_value9a = sub_message9a.c();
 
@@ -2132,13 +2145,13 @@ TEST_F(MapFieldReflectionTest, RepeatedFieldRefForRegularFields) {
     const Message& message0b =
         mmf_int32_foreign_message.Get(0, entry_int32_foreign_message.get());
     const ForeignMessage& sub_message0b =
-        DownCast<const ForeignMessage&>(message0b.GetReflection()->GetMessage(
+        DownCastMessage<ForeignMessage>(message0b.GetReflection()->GetMessage(
             message0b, fd_map_int32_foreign_message_value));
     int32_t int32_value0b = sub_message0b.c();
     const Message& message9b =
         mmf_int32_foreign_message.Get(9, entry_int32_foreign_message.get());
     const ForeignMessage& sub_message9b =
-        DownCast<const ForeignMessage&>(message9b.GetReflection()->GetMessage(
+        DownCastMessage<ForeignMessage>(message9b.GetReflection()->GetMessage(
             message9b, fd_map_int32_foreign_message_value));
     int32_t int32_value9b = sub_message9b.c();
 
@@ -2316,13 +2329,14 @@ TEST_F(MapFieldReflectionTest, UninitializedEntry) {
 }
 
 class MyMapEntry
-    : public internal::MapEntry<MyMapEntry, ::int32_t, ::int32_t,
+    : public internal::MapEntry<::int32_t, ::int32_t,
                                 internal::WireFormatLite::TYPE_INT32,
                                 internal::WireFormatLite::TYPE_INT32> {
  public:
-  constexpr MyMapEntry() {}
-  using MyMapEntry::MapEntry::MapEntry;
-  Metadata GetMetadata() const override { ABSL_CHECK(false); }
+  constexpr MyMapEntry()
+      : MyMapEntry::MapEntry(static_cast<ClassData*>(nullptr)) {}
+  MyMapEntry(Arena* arena) : MyMapEntry::MapEntry(arena, nullptr) {}
+  const ClassData* GetClassData() const { ABSL_CHECK(false); }
   static bool ValidateKey(void*) { return true; }
   static bool ValidateValue(void*) { return true; }
 };
@@ -2331,8 +2345,7 @@ TEST(MapEntryTest, ConstInit) {
   // This verifies that `MapEntry` can be constant initialized.
   PROTOBUF_CONSTINIT static MyMapEntry entry{};
   // Use the object in some way to make sure the vtable is there.
-  const google::protobuf::Message* volatile m = &entry;
-  delete m->New();
+  EXPECT_NE("", absl::StrFormat("%p", &entry));
 }
 
 // Generated Message Test ===========================================
@@ -2725,6 +2738,30 @@ TEST(GeneratedMapFieldTest, Proto2UnknownEnum) {
   EXPECT_EQ(1, to.GetReflection()->GetUnknownFields(to).field_count());
   EXPECT_EQ(1, to.known_map_field().size());
   EXPECT_EQ(UNITTEST::PROTO2_MAP_ENUM_FOO, to.known_map_field().at(0));
+}
+
+TEST(GeneratedMapFieldTest, Proto2UnknownEnumThrowsAwayUnknownData) {
+  UNITTEST::TestEnumMap to;
+  // 101: {
+  //   1: 2
+  //   2: 3     # this is an unknown enum. It should be kept.
+  //   3: 120   # this is an extra field that will be discarded.
+  // }
+  constexpr absl::string_view data = "\252\006\006\010\002\020\003\030x";
+  // Same as above, but without the extra field.
+  constexpr absl::string_view expected = "\252\006\004\010\002\020\003";
+  ASSERT_TRUE(to.ParseFromString(data));
+  EXPECT_EQ(expected, to.SerializeAsString());
+
+  // Test the same behavior with the reflection based parser.
+  to.Clear();
+  const char* ptr;
+  internal::ParseContext ctx(io::CodedInputStream::GetDefaultRecursionLimit(),
+                             false, &ptr, data);
+  ptr = WireFormat::_InternalParse(&to, ptr, &ctx);
+  ASSERT_TRUE(ptr);
+  ASSERT_TRUE(ctx.EndedAtLimit());
+  EXPECT_EQ(expected, to.SerializeAsString());
 }
 
 TEST(GeneratedMapFieldTest, Proto2UnknownEnumAllKeyTypesWork) {
@@ -3126,6 +3163,20 @@ TEST(GeneratedMapFieldReflectionTest, Accessors) {
   MapTestUtil::ExpectMapFieldsModified(message);
 }
 
+TEST(GeneratedMapFieldReflectionTest,
+     AccessingTheDefaultInstanceWithReflectionDoesNotModifyIt) {
+  const auto& msg = UNITTEST::TestMap::default_instance();
+  const auto clone_bytes = [&] {
+    return std::string(reinterpret_cast<const char*>(&msg), sizeof(msg));
+  };
+  const auto before = clone_bytes();
+  const auto& rep = msg.GetReflection()->GetRepeatedFieldRef<google::protobuf::Message>(
+      msg, msg.GetDescriptor()->FindFieldByName("map_int32_int32"));
+  EXPECT_THAT(rep, IsEmpty());
+  const auto after = clone_bytes();
+  EXPECT_EQ(before, after);
+}
+
 TEST(GeneratedMapFieldReflectionTest, Swap) {
   UNITTEST::TestMap message1;
   UNITTEST::TestMap message2;
@@ -3220,9 +3271,9 @@ TEST(GeneratedMapFieldReflectionTest, ReleaseLast) {
   std::vector<const Message*> release_last =
       MapTestUtil::GetMapEntriesFromRelease(&message);
   MapTestUtil::ExpectMapsSize(message, 1);
-#ifndef PROTOBUF_FORCE_COPY_IN_RELEASE
-  EXPECT_TRUE(expect_last == release_last);
-#endif  // !PROTOBUF_FORCE_COPY_IN_RELEASE
+  if (!internal::DebugHardenForceCopyInRelease()) {
+    EXPECT_TRUE(expect_last == release_last);
+  }
   for (std::vector<const Message*>::iterator it = release_last.begin();
        it != release_last.end(); ++it) {
     delete *it;
@@ -4071,12 +4122,11 @@ TEST(ArenaTest, ParsingAndSerializingNoHeapAllocation) {
     // NoHeapChecker no_heap;
 
     UNITTEST::TestArenaMap* from =
-        Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
+        Arena::Create<UNITTEST::TestArenaMap>(&arena);
     MapTestUtil::SetArenaMapFields(from);
     from->SerializeToString(&data);
 
-    UNITTEST::TestArenaMap* to =
-        Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
+    UNITTEST::TestArenaMap* to = Arena::Create<UNITTEST::TestArenaMap>(&arena);
     to->ParseFromString(data);
     MapTestUtil::ExpectArenaMapFieldsSet(*to);
   }
@@ -4099,10 +4149,8 @@ TEST(ArenaTest, ReflectionInTextFormat) {
   TextFormat::Printer printer;
   TextFormat::Parser parser;
 
-  UNITTEST::TestArenaMap* from =
-      Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
-  UNITTEST::TestArenaMap* to =
-      Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
+  UNITTEST::TestArenaMap* from = Arena::Create<UNITTEST::TestArenaMap>(&arena);
+  UNITTEST::TestArenaMap* to = Arena::Create<UNITTEST::TestArenaMap>(&arena);
 
   MapTestUtil::SetArenaMapFields(from);
   printer.PrintToString(*from, &data);
@@ -4115,7 +4163,7 @@ TEST(ArenaTest, ReflectionInTextFormat) {
 TEST(ArenaTest, StringMapNoLeak) {
   Arena arena;
   UNITTEST::TestArenaMap* message =
-      Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
+      Arena::Create<UNITTEST::TestArenaMap>(&arena);
   std::string data;
   // String with length less than 16 will not be allocated from heap.
   int original_capacity = data.capacity();
@@ -4145,7 +4193,7 @@ TEST(ArenaTest, IsInitialized) {
   Arena arena(options);
 
   UNITTEST::TestArenaMap* message =
-      Arena::CreateMessage<UNITTEST::TestArenaMap>(&arena);
+      Arena::Create<UNITTEST::TestArenaMap>(&arena);
   EXPECT_EQ(0, (*message->mutable_map_int32_int32())[0]);
 }
 

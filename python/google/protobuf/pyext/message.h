@@ -19,7 +19,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "google/protobuf/stubs/common.h"
+#include "absl/strings/string_view.h"
 
 namespace google {
 namespace protobuf {
@@ -100,9 +100,6 @@ typedef struct CMessage : public ContainerBase {
   // This avoid the creation of similar maps in each of those containers.
   typedef std::unordered_map<const Message*, CMessage*> SubMessagesMap;
   SubMessagesMap* child_submessages;
-
-  // A reference to PyUnknownFields.
-  PyObject* unknown_field_set;
 
   // Implements the "weakref" protocol for this object.
   PyObject* weakreflist;
@@ -229,10 +226,6 @@ int InitAttributes(CMessage* self, PyObject* args, PyObject* kwargs);
 
 PyObject* MergeFrom(CMessage* self, PyObject* arg);
 
-// This method does not do anything beyond checking that no other extension
-// has been registered with the same field number on this class.
-PyObject* RegisterExtension(PyObject* cls, PyObject* extension_handle);
-
 // Get a field from a message.
 PyObject* GetFieldValue(CMessage* self,
                         const FieldDescriptor* field_descriptor);
@@ -322,7 +315,7 @@ bool CheckAndSetString(
     bool append,
     int index);
 PyObject* ToStringObject(const FieldDescriptor* descriptor,
-                         const std::string& value);
+                         absl::string_view value);
 
 // Check if the passed field descriptor belongs to the given message.
 // If not, return false and set a Python exception (a KeyError)
@@ -342,10 +335,10 @@ bool InitProto2MessageModule(PyObject *m);
 
 // These are referenced by repeated_scalar_container, and must
 // be explicitly instantiated.
-extern template bool CheckAndGetInteger<int32>(PyObject*, int32*);
-extern template bool CheckAndGetInteger<int64>(PyObject*, int64*);
-extern template bool CheckAndGetInteger<uint32>(PyObject*, uint32*);
-extern template bool CheckAndGetInteger<uint64>(PyObject*, uint64*);
+extern template bool CheckAndGetInteger<int32_t>(PyObject*, int32_t*);
+extern template bool CheckAndGetInteger<int64_t>(PyObject*, int64_t*);
+extern template bool CheckAndGetInteger<uint32_t>(PyObject*, uint32_t*);
+extern template bool CheckAndGetInteger<uint64_t>(PyObject*, uint64_t*);
 
 }  // namespace python
 }  // namespace protobuf

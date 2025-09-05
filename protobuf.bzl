@@ -1,7 +1,7 @@
 load("@bazel_skylib//lib:versions.bzl", "versions")
 load("@rules_cc//cc:defs.bzl", "objc_library")
-load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 load("@rules_python//python:defs.bzl", "py_library")
+load("//bazel/common:proto_info.bzl", "ProtoInfo")
 
 def _GetPath(ctx, path):
     if ctx.label.workspace_root:
@@ -80,6 +80,7 @@ def _proto_gen_impl(ctx):
     srcs = ctx.files.srcs
     langs = ctx.attr.langs or []
     out_type = ctx.attr.out_type
+    enable_editions = ctx.attr.enable_editions
     deps = depset(direct = ctx.files.srcs)
     source_dir = _SourceDir(ctx)
     gen_dir = _GenDir(ctx).rstrip("/")
@@ -130,6 +131,8 @@ def _proto_gen_impl(ctx):
     generated_files = []
     for src in srcs:
         args = []
+        if enable_editions:
+            args.append("--experimental_editions")
 
         in_gen_dir = src.root.path == gen_dir
         if in_gen_dir:
@@ -231,6 +234,7 @@ Args:
   srcs: Protocol Buffers definition files (.proto) to run the protocol compiler
     against.
   deps: a list of dependency labels; must be other proto libraries.
+  enable_editions: if true, sets the --experimental_editions flag.
   includes: a list of include paths to .proto files.
   protoc: the label of the protocol compiler to generate the sources.
   plugin: the label of the protocol compiler plugin to be passed to the protocol
@@ -247,6 +251,7 @@ _proto_gen = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = True),
         "deps": attr.label_list(providers = [ProtoGenInfo]),
+        "enable_editions": attr.bool(),
         "includes": attr.string_list(),
         "protoc": attr.label(
             cfg = "exec",
@@ -267,7 +272,6 @@ _proto_gen = rule(
             default = "all",
         ),
     },
-    output_to_genfiles = True,
     implementation = _proto_gen_impl,
 )
 
@@ -409,8 +413,7 @@ def internal_objc_proto_library(
         testonly = None,
         visibility = ["//visibility:public"],
         **kwargs):
-    """Bazel rule to create a Objective-C protobuf library from proto source
-    files
+    """Bazel rule to create a Objective-C protobuf library from proto sources
 
     NOTE: the rule is only an internal workaround to generate protos. The
     interface may change and the rule may be removed when bazel has introduced
@@ -423,7 +426,7 @@ def internal_objc_proto_library(
       outs: a list of expected output files.
       proto_deps: a list of proto file dependencies that don't have a
         objc_proto_library rule.
-      include: a string indicating the include path of the .proto files.
+      includes: a string indicating the include path of the .proto files.
       default_runtime: the Objective-C Protobuf runtime
       protoc: the label of the protocol compiler to generate the sources.
       testonly: common rule attribute (see:
@@ -644,6 +647,9 @@ def py_proto_library(
       This is provided for backwards compatibility only.  Bazel 5.3 will
       introduce support for py_proto_library, which should be used instead.
     """
+    print("The py_proto_library macro is deprecated and will be removed in the "
+        + "30.x release. switch to the rule defined by rules_python or the one "
+        + "in bazel/py_proto_library.bzl.")
     internal_py_proto_library(*args, **kwargs)
 
 def _source_proto_library(
@@ -657,6 +663,7 @@ def _source_proto_library(
         protoc = Label("//:protoc"),
         testonly = None,
         visibility = ["//visibility:public"],
+        enable_editions = False,
         **kwargs):
     """Bazel rule to create generated protobuf code from proto source files for
     languages not well supported by Bazel yet.  This will output the generated
@@ -701,6 +708,7 @@ def _source_proto_library(
             srcs = proto_deps,
             protoc = protoc,
             includes = includes,
+            enable_editions = enable_editions,
         )
         full_deps.append(":%s_deps_genproto" % name)
 
@@ -714,6 +722,7 @@ def _source_proto_library(
         protoc = protoc,
         testonly = testonly,
         visibility = visibility,
+        enable_editions = enable_editions,
     )
 
     native.filegroup(

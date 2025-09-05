@@ -1,65 +1,36 @@
 // Protocol Buffers - Google's data interchange format
 // Copyright 2023 Google LLC.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google LLC nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file or at
+// https://developers.google.com/open-source/licenses/bsd
 
 #ifndef UPB_UPB_GENERATOR_PLUGIN_H_
 #define UPB_UPB_GENERATOR_PLUGIN_H_
 
 #include <stdio.h>
 
+#include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
+
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
 #endif
 
-// begin:google_only
-// #ifndef UPB_BOOTSTRAP_STAGE0
-// #include "google/protobuf/descriptor.upb.h"
-// #include "google/protobuf/compiler/plugin.upb.h"
-// #else
-// #include "google/protobuf/compiler/plugin.upb.h"
-// #include "google/protobuf/descriptor.upb.h"
-// #endif
-// end:google_only
-
-// begin:github_only
-#include "google/protobuf/compiler/plugin.upb.h"
-#include "google/protobuf/descriptor.upb.h"
-// end:github_only
-
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/absl_log.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "google/protobuf/compiler/code_generator_lite.h"
+#include "upb/base/status.hpp"
+#include "upb/base/string_view.h"
+#include "upb/mem/arena.h"
+#include "upb/mem/arena.hpp"
 #include "upb/reflection/def.hpp"
+#include "upb/reflection/descriptor_bootstrap.h"
+#include "upb_generator/plugin_bootstrap.h"
 
 // Must be last.
 #include "upb/port/def.inc"
@@ -70,17 +41,7 @@ namespace generator {
 inline std::vector<std::pair<std::string, std::string>> ParseGeneratorParameter(
     const absl::string_view text) {
   std::vector<std::pair<std::string, std::string>> ret;
-  for (absl::string_view sp : absl::StrSplit(text, ',', absl::SkipEmpty())) {
-    std::string::size_type equals_pos = sp.find_first_of('=');
-    std::pair<std::string, std::string> value;
-    if (equals_pos == std::string::npos) {
-      value.first = std::string(sp);
-    } else {
-      value.first = std::string(sp.substr(0, equals_pos));
-      value.second = std::string(sp.substr(equals_pos + 1));
-    }
-    ret.push_back(std::move(value));
-  }
+  google::protobuf::compiler::ParseGeneratorParameter(text, &ret);
   return ret;
 }
 
@@ -187,9 +148,16 @@ class Plugin {
       ABSL_LOG(FATAL) << "Failed to parse CodeGeneratorRequest";
     }
     response_ = UPB_DESC(compiler_CodeGeneratorResponse_new)(arena_.ptr());
+
+    int features =
+        UPB_DESC(compiler_CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL) |
+        UPB_DESC(compiler_CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS);
     UPB_DESC(compiler_CodeGeneratorResponse_set_supported_features)
-    (response_,
-     UPB_DESC(compiler_CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL));
+    (response_, features);
+    UPB_DESC(compiler_CodeGeneratorResponse_set_minimum_edition)
+    (response_, UPB_DESC(EDITION_PROTO2));
+    UPB_DESC(compiler_CodeGeneratorResponse_set_maximum_edition)
+    (response_, UPB_DESC(EDITION_2023));
   }
 
   void WriteResponse() {
