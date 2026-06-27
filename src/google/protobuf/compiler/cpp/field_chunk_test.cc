@@ -1,5 +1,6 @@
 #include "google/protobuf/compiler/cpp/field_chunk.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 

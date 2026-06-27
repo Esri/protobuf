@@ -15,6 +15,7 @@ import com.google.protobuf.MessageReflection.MergeTarget;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.CharBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,6 +40,10 @@ public final class TextFormat {
   private static final Logger logger = Logger.getLogger(TextFormat.class.getName());
 
   private static final String DEBUG_STRING_SILENT_MARKER = " \t ";
+  private static final String ENABLE_INSERT_SILENT_MARKER_ENV_NAME =
+      "SILENT_MARKER_INSERTION_ENABLED";
+  private static final boolean ENABLE_INSERT_SILENT_MARKER =
+    System.getenv().getOrDefault(ENABLE_INSERT_SILENT_MARKER_ENV_NAME, "false").equals("true");
 
   private static final String REDACTED_MARKER = "[REDACTED]";
 
@@ -118,6 +123,11 @@ public final class TextFormat {
     return Printer.DEFAULT_DEBUG_FORMAT;
   }
 
+  /** Printer instance which escapes non-ASCII characters and prints in the debug format. */
+  public static Printer defaultFormatPrinter() {
+    return Printer.DEFAULT_FORMAT;
+  }
+
   /** Helper class for converting protobufs to text. */
   public static final class Printer {
 
@@ -140,6 +150,27 @@ public final class TextFormat {
             ExtensionRegistryLite.getEmptyRegistry(),
             /* enablingSafeDebugFormat= */ true,
             /* singleLine= */ false);
+
+    // Printer instance which escapes non-ASCII characters and inserts a silent marker.
+    private static final Printer DEFAULT_FORMAT =
+        new Printer(
+                /* escapeNonAscii= */ true,
+                /* useShortRepeatedPrimitives= */ false,
+                TypeRegistry.getEmptyTypeRegistry(),
+                ExtensionRegistryLite.getEmptyRegistry(),
+                /* enablingSafeDebugFormat= */ false,
+                /* singleLine= */ false)
+            .setInsertSilentMarker(ENABLE_INSERT_SILENT_MARKER);
+
+    static Printer getOutputModePrinter() {
+      if (ProtobufToStringOutput.isDefaultFormat()) {
+        return defaultFormatPrinter();
+      } else if (ProtobufToStringOutput.shouldOutputDebugFormat()) {
+        return debugFormatPrinter();
+      } else {
+        return printer();
+      }
+    }
 
     /**
      * A list of the public APIs that output human-readable text from a message. A higher-level API
@@ -186,6 +217,14 @@ public final class TextFormat {
 
     private final boolean singleLine;
 
+    private boolean insertSilentMarker;
+
+    @CanIgnoreReturnValue
+    private Printer setInsertSilentMarker(boolean insertSilentMarker) {
+      this.insertSilentMarker = insertSilentMarker;
+      return this;
+    }
+
     // Any API level equal to or greater than this level will be reported. This is set to
     // REPORT_NONE by default to prevent reporting for now.
     private static final ThreadLocal<FieldReporterLevel> sensitiveFieldReportingLevel =
@@ -209,6 +248,7 @@ public final class TextFormat {
       this.extensionRegistry = extensionRegistry;
       this.enablingSafeDebugFormat = enablingSafeDebugFormat;
       this.singleLine = singleLine;
+      this.insertSilentMarker = false;
     }
 
     /**
@@ -338,7 +378,12 @@ public final class TextFormat {
     void print(final MessageOrBuilder message, final Appendable output, FieldReporterLevel level)
         throws IOException {
       TextGenerator generator =
-          setSingleLineOutput(output, this.singleLine, message.getDescriptorForType(), level);
+          setSingleLineOutput(
+              output,
+              this.singleLine,
+              message.getDescriptorForType(),
+              level,
+              this.insertSilentMarker);
       print(message, generator);
     }
 
@@ -408,7 +453,9 @@ public final class TextFormat {
       }
       generator.print("[");
       generator.print(typeUrl);
-      generator.print("] {");
+      generator.print("]");
+      generator.maybePrintSilentMarker();
+      generator.print("{");
       generator.eol();
       generator.indent();
       print(contentBuilder, generator);
@@ -619,7 +666,8 @@ public final class TextFormat {
     // field, b) via an enum field marked with debug_redact=true that is within the proto's
     // FieldOptions, either directly or indirectly via a message option.
     private boolean shouldRedact(final FieldDescriptor field, TextGenerator generator) {
-      return enablingSafeDebugFormat && field.isSensitive();
+      FieldDescriptor.RedactionState state = field.getRedactionState();
+      return enablingSafeDebugFormat && state.redact;
     }
 
     /** Like {@code print()}, but writes directly to a {@code String} and returns it. */
@@ -792,11 +840,13 @@ public final class TextFormat {
       }
 
       if (field.getJavaType() == FieldDescriptor.JavaType.MESSAGE) {
-        generator.print(" {");
+        generator.maybePrintSilentMarker();
+        generator.print("{");
         generator.eol();
         generator.indent();
       } else {
-        generator.print(": ");
+        generator.print(":");
+        generator.maybePrintSilentMarker();
       }
 
       printFieldValue(field, value, generator);
@@ -831,7 +881,8 @@ public final class TextFormat {
             redact);
         for (final UnknownFieldSet value : field.getGroupList()) {
           generator.print(entry.getKey().toString());
-          generator.print(" {");
+          generator.maybePrintSilentMarker();
+          generator.print("{");
           generator.eol();
           generator.indent();
           printUnknownFields(value, generator, redact);
@@ -851,11 +902,83 @@ public final class TextFormat {
         throws IOException {
       for (final Object value : values) {
         generator.print(String.valueOf(number));
-        generator.print(": ");
+        generator.print(":");
+        generator.maybePrintSilentMarker();
         printUnknownFieldValue(wireType, value, generator, redact);
         generator.eol();
       }
     }
+  }
+
+  /**
+   * Outputs a textual representation of the Protocol Message supplied into the parameter output.
+   * (This representation is the new version of the classic "ProtocolPrinter" output from the
+   * original Protocol Buffer system)
+   *
+   * @deprecated Use {@code printer().print(MessageOrBuilder, Appendable)}
+   */
+  @Deprecated
+  @InlineMe(
+      replacement = "TextFormat.printer().print(message, output)",
+      imports = "com.google.protobuf.TextFormat")
+  public static void print(final MessageOrBuilder message, final Appendable output)
+      throws IOException {
+    printer().print(message, output);
+  }
+
+  /**
+   * Same as {@code print()}, except that non-ASCII characters are not escaped.
+   *
+   * @deprecated Use {@code printer().escapingNonAscii(false).print(MessageOrBuilder, Appendable)}
+   */
+  @Deprecated
+  public static void printUnicode(final MessageOrBuilder message, final Appendable output)
+      throws IOException {
+    printer()
+        .escapingNonAscii(false)
+        .print(message, output, Printer.FieldReporterLevel.PRINT_UNICODE);
+  }
+
+  /**
+   * Like {@code print()}, but writes directly to a {@code String} and returns it.
+   *
+   * @deprecated Use {@code message.toString()}
+   */
+  @Deprecated
+  public static String printToString(final MessageOrBuilder message) {
+    return printer().printToString(message, Printer.FieldReporterLevel.TEXTFORMAT_PRINT_TO_STRING);
+  }
+
+  /**
+   * Same as {@code printToString()}, except that non-ASCII characters in string type fields are not
+   * escaped in backslash+octals.
+   *
+   * @deprecated Use {@code printer().escapingNonAscii(false).printToString(MessageOrBuilder)}
+   */
+  @Deprecated
+  public static String printToUnicodeString(final MessageOrBuilder message) {
+    return printer()
+        .escapingNonAscii(false)
+        .printToString(message, Printer.FieldReporterLevel.PRINT_UNICODE);
+  }
+
+  /**
+   * Outputs a textual representation of the value of given field value.
+   *
+   * @deprecated Use {@code printer().printFieldValue(FieldDescriptor, Object, Appendable)}
+   * @param field the descriptor of the field
+   * @param value the value of the field
+   * @param output the output to which to append the formatted value
+   * @throws ClassCastException if the value is not appropriate for the given field descriptor
+   * @throws IOException if there is an exception writing to the output
+   */
+  @Deprecated
+  @InlineMe(
+      replacement = "TextFormat.printer().printFieldValue(field, value, output)",
+      imports = "com.google.protobuf.TextFormat")
+  public static void printFieldValue(
+      final FieldDescriptor field, final Object value, final Appendable output) throws IOException {
+    printer().printFieldValue(field, value, output);
   }
 
   /** Convert an unsigned 32-bit integer to a string. */
@@ -879,15 +1002,18 @@ public final class TextFormat {
   }
 
   private static TextGenerator setSingleLineOutput(Appendable output, boolean singleLine) {
-    return new TextGenerator(output, singleLine, null, Printer.FieldReporterLevel.TEXT_GENERATOR);
+    return new TextGenerator(
+        output, singleLine, null, Printer.FieldReporterLevel.TEXT_GENERATOR, false);
   }
 
   private static TextGenerator setSingleLineOutput(
       Appendable output,
       boolean singleLine,
       Descriptor rootMessageType,
-      Printer.FieldReporterLevel fieldReporterLevel) {
-    return new TextGenerator(output, singleLine, rootMessageType, fieldReporterLevel);
+      Printer.FieldReporterLevel fieldReporterLevel,
+      boolean shouldEmitSilentMarker) {
+    return new TextGenerator(
+        output, singleLine, rootMessageType, fieldReporterLevel, shouldEmitSilentMarker);
   }
 
   /** An inner class for writing text to the output stream. */
@@ -895,6 +1021,7 @@ public final class TextFormat {
     private final Appendable output;
     private final StringBuilder indent = new StringBuilder();
     private final boolean singleLineMode;
+    private boolean shouldEmitSilentMarker;
     // While technically we are "at the start of a line" at the very beginning of the output, all
     // we would do in response to this is emit the (zero length) indentation, so it has no effect.
     // Setting it false here does however suppress an unwanted leading space in single-line mode.
@@ -910,11 +1037,13 @@ public final class TextFormat {
         final Appendable output,
         boolean singleLineMode,
         Descriptor rootMessageType,
-        Printer.FieldReporterLevel fieldReporterLevel) {
+        Printer.FieldReporterLevel fieldReporterLevel,
+        boolean shouldEmitSilentMarker) {
       this.output = output;
       this.singleLineMode = singleLineMode;
       this.rootMessageType = rootMessageType;
       this.fieldReporterLevel = fieldReporterLevel;
+      this.shouldEmitSilentMarker = shouldEmitSilentMarker;
     }
 
     /**
@@ -957,6 +1086,15 @@ public final class TextFormat {
         output.append("\n");
       }
       atStartOfLine = true;
+    }
+
+    void maybePrintSilentMarker() throws IOException {
+      if (shouldEmitSilentMarker) {
+        output.append(DEBUG_STRING_SILENT_MARKER);
+        shouldEmitSilentMarker = false;
+      } else {
+        output.append(" ");
+      }
     }
   }
 
@@ -1809,6 +1947,7 @@ public final class TextFormat {
        *
        * @throws IllegalArgumentException if a registry is already set.
        */
+      @CanIgnoreReturnValue
       public Builder setTypeRegistry(TypeRegistry typeRegistry) {
         this.typeRegistry = typeRegistry;
         return this;
@@ -1822,6 +1961,7 @@ public final class TextFormat {
        * <p>Use of this parameter is discouraged which may hide some errors (e.g. spelling error on
        * field name).
        */
+      @CanIgnoreReturnValue
       public Builder setAllowUnknownFields(boolean allowUnknownFields) {
         this.allowUnknownFields = allowUnknownFields;
         return this;
@@ -2085,9 +2225,9 @@ public final class TextFormat {
         // .proto file, which actually matches their type names, not their field
         // names.
         if (field == null) {
-          // Explicitly specify US locale so that this code does not break when
+          // Explicitly specify the 'neutral' ROOT locale so that this code does not break when
           // executing in Turkey.
-          final String lowerName = name.toLowerCase(Locale.US);
+          final String lowerName = name.toLowerCase(Locale.ROOT);
           field = type.findFieldByName(lowerName);
           // If the case-insensitive match worked but the field is NOT a group,
           if (field != null && !field.isGroupLike()) {
@@ -2711,7 +2851,7 @@ public final class TextFormat {
                     throw new InvalidEscapeSequenceException(
                         "Invalid escape sequence: '\\u' refers to a surrogate");
                   }
-                  byte[] chUtf8 = Character.toString(ch).getBytes(Internal.UTF_8);
+                  byte[] chUtf8 = Character.toString(ch).getBytes(StandardCharsets.UTF_8);
                   System.arraycopy(chUtf8, 0, result, pos, chUtf8.length);
                   pos += chUtf8.length;
                   i += 3;
@@ -2756,7 +2896,7 @@ public final class TextFormat {
                 }
                 int[] codepoints = new int[1];
                 codepoints[0] = codepoint;
-                byte[] chUtf8 = new String(codepoints, 0, 1).getBytes(Internal.UTF_8);
+                byte[] chUtf8 = new String(codepoints, 0, 1).getBytes(StandardCharsets.UTF_8);
                 System.arraycopy(chUtf8, 0, result, pos, chUtf8.length);
                 pos += chUtf8.length;
                 i += 7;
@@ -2799,7 +2939,7 @@ public final class TextFormat {
    * it's weird.
    */
   static String escapeText(final String input) {
-    return escapeBytes(ByteString.copyFromUtf8(input));
+    return TextFormatEscaper.escapeText(input);
   }
 
   /** Escape double quotes and backslashes in a String for emittingUnicode output of a message. */

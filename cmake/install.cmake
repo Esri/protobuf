@@ -61,7 +61,7 @@ if (protobuf_BUILD_PROTOC_BINARIES)
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc
     BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT protoc)
   if (protobuf_BUILD_LIBUPB)
-    foreach (generator upb upbdefs)
+    foreach (generator upb upbdefs upb_minitable)
       list(APPEND _protobuf_binaries protoc-gen-${generator})
       install(TARGETS protoc-gen-${generator} EXPORT protobuf-targets
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT upb-generators
@@ -92,6 +92,7 @@ set(protobuf_HEADERS
   ${cpp_features_proto_proto_srcs}
   ${descriptor_proto_proto_srcs}
   ${plugin_proto_proto_srcs}
+  ${c_sharp_features_proto_proto_srcs}
   ${java_features_proto_proto_srcs}
   ${go_features_proto_proto_srcs}
 )
@@ -109,6 +110,7 @@ endif ()
 set(protobuf_STRIP_PREFIXES
   "/src"
   "/java/core/src/main/resources"
+  "/csharp"
   "/go"
   "/"
 )

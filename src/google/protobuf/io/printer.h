@@ -28,7 +28,6 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/absl_check.h"
-#include "absl/meta/type_traits.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
@@ -140,7 +139,8 @@ class AnnotationProtoCollector : public AnnotationCollector {
 
   void AddAnnotationNew(Annotation& a) override {
     auto* annotation = annotation_proto_->add_annotation();
-    annotation->ParseFromString(a.second);
+    // TODO: Remove this suppression.
+    (void)annotation->ParseFromString(a.second);
     annotation->set_begin(a.first.first);
     annotation->set_end(a.first.second);
   }
@@ -664,7 +664,7 @@ class PROTOBUF_EXPORT Printer {
   void Indent() { indent_ += options_.spaces_per_indent; }
 
   // Undoes a call to Indent().
-  void Outdent();
+  void Outdent(SourceLocation loc = SourceLocation::current());
 
   // FormatInternal is a helper function not meant to use directly, use
   // compiler::cpp::Formatter instead.

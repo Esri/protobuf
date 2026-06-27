@@ -2,11 +2,21 @@
 # Protocol Buffers Compiler - C++ code generator
 ################################################################################
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:proto_library.bzl", "proto_library")
 load("//build_defs:cpp_opts.bzl", "COPTS")
+
+cc_binary(
+    name = "protoc-gen-cpp",
+    srcs = ["main.cc"],
+    visibility = ["//:__pkg__"],
+    deps = [
+        ":cpp",
+        "//src/google/protobuf/compiler:plugin",
+    ],
+)
 
 cc_library(
     name = "names",
@@ -18,20 +28,6 @@ cc_library(
         ":names_internal",
         "//src/google/protobuf",
         "//src/google/protobuf/compiler:code_generator",
-        "@abseil-cpp//absl/strings",
-    ],
-)
-
-cc_library(
-    name = "generator_headers",
-    hdrs = ["generator.h"],
-    copts = COPTS,
-    strip_include_prefix = "/src",
-    visibility = ["//pkg:__pkg__"],
-    deps = [
-        "//src/google/protobuf",
-        "//src/google/protobuf/compiler:code_generator",
-        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
     ],
 )
@@ -258,6 +254,7 @@ cc_test(
     srcs = ["file_unittest.cc"],
     deps = [
         ":cpp",
+        ":names_internal",
         "//:protobuf",
         "//src/google/protobuf",
         "//src/google/protobuf:cc_test_protos",
@@ -326,7 +323,9 @@ cc_test(
         "//src/google/protobuf/compiler:command_line_interface",
         "//src/google/protobuf/testing",
         "//src/google/protobuf/testing:file",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log:absl_check",
+        "@abseil-cpp//absl/strings",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
@@ -426,13 +425,6 @@ cc_test(
 ################################################################################
 # Distribution packaging
 ################################################################################
-
-pkg_files(
-    name = "dist_files",
-    srcs = glob(["**/*"]),
-    strip_prefix = strip_prefix.from_root(""),
-    visibility = ["//src:__pkg__"],
-)
 
 filegroup(
     name = "test_srcs",
