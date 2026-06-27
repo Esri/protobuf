@@ -2059,15 +2059,6 @@ class PROTOBUF_EXPORT FileDescriptor : private internal::SymbolBase {
   PROTOBUF_FUTURE_ADD_EARLY_NODISCARD absl::string_view option_dependency_name(
       int index) const;
 
-  // The number of files that are imported for options.
-  // The option dependency list is separate from the dependency list.
-  int option_dependency_count() const;
-  // Gets name of an option imported file by index, where
-  //     0 <= index < option_dependency_count()
-  // These are returned in the relative order they were defined in the .proto
-  // file.
-  absl::string_view option_dependency_name(int index) const;
-
   // Number of top-level message types defined in this file.  (This does not
   // include nested types.)
   PROTOBUF_FUTURE_ADD_EARLY_NODISCARD int message_type_count() const;
