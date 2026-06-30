@@ -1,9 +1,12 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_CPP_FIELD_CHUNK_H__
 #define GOOGLE_PROTOBUF_COMPILER_CPP_FIELD_CHUNK_H__
 
+#include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
+#include "absl/types/span.h"
 #include "google/protobuf/compiler/cpp/helpers.h"
 #include "google/protobuf/compiler/cpp/options.h"
 #include "google/protobuf/descriptor.h"
@@ -32,6 +35,10 @@ struct FieldChunk {
 using ChunkIterator = std::vector<FieldChunk>::iterator;
 
 PROTOC_EXPORT uint32_t
+GenChunkMask(absl::Span<const FieldDescriptor* const> fields,
+             absl::Span<const int> has_bit_indices);
+
+PROTOC_EXPORT uint32_t
 GenChunkMask(const std::vector<const FieldDescriptor*>& fields,
              const std::vector<int>& has_bit_indices);
 
@@ -47,7 +54,7 @@ std::vector<FieldChunk> CollectFields(
   std::vector<FieldChunk> chunks;
   for (auto field : fields) {
     if (chunks.empty() || !equivalent(chunks.back().fields.back(), field)) {
-      chunks.emplace_back(internal::cpp::HasHasbit(field),
+      chunks.emplace_back(HasHasbit(field, options),
                           IsRarelyPresent(field, options),
                           ShouldSplit(field, options));
     }

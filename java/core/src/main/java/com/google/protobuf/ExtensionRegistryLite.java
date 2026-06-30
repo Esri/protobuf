@@ -53,6 +53,27 @@ public class ExtensionRegistryLite {
   // applications. Need to support this feature on smaller granularity.
   private static volatile boolean eagerlyParseMessageSets = false;
 
+  enum LazyExtensionMode {
+    EAGER,
+    // Caution: This mode is unsafe as it postpone parsing errors such as required fields missing
+    // until first access.
+    UNVERIFIED_LAZY;
+  }
+
+  private static volatile LazyExtensionMode lazyExtensionMode = LazyExtensionMode.EAGER;
+
+  static void setLazyExtensionMode(LazyExtensionMode mode) {
+    lazyExtensionMode = mode;
+  }
+
+  static LazyExtensionMode getLazyExtensionMode() {
+    return lazyExtensionMode;
+  }
+
+  static boolean lazyExtensionEnabled() {
+    return lazyExtensionMode == LazyExtensionMode.UNVERIFIED_LAZY;
+  }
+
   // Visible for testing.
   static final String EXTENSION_CLASS_NAME = "com.google.protobuf.Extension";
 
@@ -84,7 +105,7 @@ public class ExtensionRegistryLite {
    * available.
    */
   public static ExtensionRegistryLite newInstance() {
-    return Protobuf.assumeLiteRuntime
+    return Android.assumeLiteRuntime
         ? new ExtensionRegistryLite()
         : ExtensionRegistryFactory.create();
   }
@@ -96,7 +117,7 @@ public class ExtensionRegistryLite {
    * ExtensionRegistry} (if the full (non-Lite) proto libraries are available).
    */
   public static ExtensionRegistryLite getEmptyRegistry() {
-    if (Protobuf.assumeLiteRuntime) {
+    if (Android.assumeLiteRuntime) {
       return EMPTY_REGISTRY_LITE;
     }
     ExtensionRegistryLite result = emptyRegistry;
@@ -141,10 +162,10 @@ public class ExtensionRegistryLite {
    * i.e. {@link GeneratedMessageLite.GeneratedExtension}.
    */
   public final void add(ExtensionLite<?, ?> extension) {
-    if (GeneratedMessageLite.GeneratedExtension.class.isAssignableFrom(extension.getClass())) {
+    if (extension instanceof GeneratedMessageLite.GeneratedExtension) {
       add((GeneratedMessageLite.GeneratedExtension<?, ?>) extension);
     }
-    if (!Protobuf.assumeLiteRuntime && ExtensionRegistryFactory.isFullRegistry(this)) {
+    if (!Android.assumeLiteRuntime && ExtensionRegistryFactory.isFullRegistry(this)) {
       try {
         this.getClass().getMethod("add", ExtensionClassHolder.INSTANCE).invoke(this, extension);
       } catch (Exception e) {
