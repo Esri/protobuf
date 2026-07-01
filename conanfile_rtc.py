@@ -18,6 +18,7 @@ class ProtobufConan(ConanFile):
         # headers
         self.copy("*.h*", src=base + "src", dst=relative + "src")
         self.copy("*.inc", src=base + "src", dst=relative + "src")
+        self.copy("*.h*", src=base + "third_party", dst=relative + "third_party")
 
         # libraries
         output = "output/" + str(self.settings.platform_architecture_target) + "/staticlib"
