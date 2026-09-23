@@ -64,8 +64,7 @@ files {
   "src/google/protobuf/text_format.cc",
   "src/google/protobuf/unknown_field_set.cc",
   "src/google/protobuf/wire_format.cc",
-  "src/google/protobuf/wire_format_lite.cc",
-  "third_party/utf8_range/utf8_range.c",
+  "src/google/protobuf/wire_format_lite.cc"
 }
 
 if (_PLATFORM_ANDROID) then
